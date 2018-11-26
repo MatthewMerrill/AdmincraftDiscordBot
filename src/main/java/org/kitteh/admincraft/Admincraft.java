@@ -31,6 +31,7 @@ import sx.blah.discord.api.IDiscordClient;
 import sx.blah.discord.api.internal.json.objects.EmbedObject;
 import sx.blah.discord.handle.impl.events.guild.GuildEvent;
 import sx.blah.discord.handle.obj.IChannel;
+import sx.blah.discord.handle.obj.IMessage;
 import sx.blah.discord.util.DiscordException;
 import sx.blah.discord.util.EmbedBuilder;
 import sx.blah.discord.util.RateLimitException;
@@ -43,6 +44,8 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 
 public class Admincraft {
     private static IDiscordClient client;
@@ -133,12 +136,12 @@ public class Admincraft {
         sendMessage(event.getGuild().getChannelByID(config.getLogChannelId()), embed);
     }
 
-    public static void sendMessage(IChannel channel, String message) {
-        queue(() -> channel.sendMessage(message));
+    public static CompletableFuture<IMessage> sendMessage(IChannel channel, String message) {
+        return queue(() -> channel.sendMessage(message));
     }
 
-    public static void sendMessage(IChannel channel, EmbedObject embed) {
-        queue(() -> channel.sendMessage(embed));
+    public static CompletableFuture<IMessage> sendMessage(IChannel channel, EmbedObject embed) {
+        return queue(() -> channel.sendMessage(embed));
     }
 
     public static void queue(Runnable thingToDo) {
@@ -152,5 +155,22 @@ public class Admincraft {
                 e.printStackTrace();
             }
         });
+    }
+
+    public static <T> CompletableFuture<T> queue(Supplier<T> thingToDo) {
+        CompletableFuture<T> future = new CompletableFuture<>();
+        RequestBuffer.request(() -> {
+            try {
+                future.complete(thingToDo.get());
+            } catch (RateLimitException e) {
+                future.completeExceptionally(e);
+                throw e;
+            } catch (DiscordException e) {
+                // TODO Handle cleaner
+                e.printStackTrace();
+                future.completeExceptionally(e);
+            }
+        });
+        return future;
     }
 }

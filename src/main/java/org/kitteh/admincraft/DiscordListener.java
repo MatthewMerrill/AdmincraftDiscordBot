@@ -50,6 +50,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -218,6 +219,13 @@ public class DiscordListener {
                 if (event.getReaction().getEmoji().equals(ReactionEmoji.of(event.getGuild().getEmojiByName(UPBOAT)))) {
                     Admincraft.sendMessage(event.getChannel(), "Banned user " + target.getDisplayName(event.getGuild()) + " at request of " + event.getUser().getDisplayName(event.getGuild()));
                     Admincraft.queue(() -> event.getGuild().banUser(target, 1));
+                    // Delete welcome message if we have it tracked
+                    UserMonitor monitor = this.monitor.get(target.getLongID());
+                    if (monitor != null) {
+                        monitor.getFutureWelcomeMessageId()
+                            .thenCompose(id ->  Admincraft.queue(() -> event.getGuild().getMessageByID(id)))
+                            .thenAccept(msg -> Admincraft.queue(() -> msg.delete()));
+                    }
                 } else if (event.getReaction().getEmoji().equals(ReactionEmoji.of(event.getGuild().getEmojiByName(DOWNBOAT)))) {
                     Admincraft.sendMessage(event.getChannel(), "No longer considering user " + target.getDisplayName(event.getGuild()) + " at request of " + event.getUser().getDisplayName(event.getGuild()));
                 } else {
@@ -238,8 +246,11 @@ public class DiscordListener {
         builder.withFooterText(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.FULL, FormatStyle.MEDIUM).withZone(ZoneId.systemDefault()).format(event.getJoinTime()));
         builder.appendField("Joined:", event.getUser().getName(), true);
         Admincraft.log(event, builder.build());
-        this.monitor.put(event.getUser().getLongID(), new UserMonitor());
-        Admincraft.sendMessage(event.getGuild().getChannelByID(Admincraft.config.getWelcomeChannelId()), "Welcome, " + event.getUser().mention() + " :) Tell us about yourself!");
+
+        CompletableFuture<IMessage> futureWelcomeMessage = Admincraft.sendMessage(
+                event.getGuild().getChannelByID(Admincraft.config.getWelcomeChannelId()),
+                "Welcome, " + event.getUser().mention() + " :) Tell us about yourself!");
+        this.monitor.put(event.getUser().getLongID(), new UserMonitor(futureWelcomeMessage));
     }
 
     @EventSubscriber

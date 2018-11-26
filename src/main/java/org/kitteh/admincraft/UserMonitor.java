@@ -23,14 +23,24 @@
  */
 package org.kitteh.admincraft;
 
+import sx.blah.discord.handle.obj.IMessage;
+import java.util.concurrent.CompletableFuture;
+
 public class UserMonitor {
     private long joinTime;
     private int mentions;
     private int messages;
     private boolean flagged;
+    private CompletableFuture<Long> welcomeMsgId;
 
     public UserMonitor() {
         this.joinTime = System.currentTimeMillis();
+        this.welcomeMsgId = CompletableFuture_failedFuture(new AssertionError("User was never welcomed"));
+    }
+
+    public UserMonitor(CompletableFuture<IMessage> welcomeMsg) {
+        this.joinTime = System.currentTimeMillis();
+        this.welcomeMsgId = welcomeMsg.thenApply(IMessage::getLongID);
     }
 
     public int getMinutes() {
@@ -43,6 +53,10 @@ public class UserMonitor {
 
     public int getMessages() {
         return messages;
+    }
+
+    public CompletableFuture<Long> getFutureWelcomeMessageId() {
+        return this.welcomeMsgId;
     }
 
     public int addMention(int count) {
@@ -64,5 +78,12 @@ public class UserMonitor {
 
     public boolean canRemove() {
         return this.getMinutes() > 300;
+    }
+
+    // TODO: Move source version to 20th century and remove this polyfill
+    private static final <T> CompletableFuture<T> CompletableFuture_failedFuture(Throwable t) {
+        CompletableFuture<T> future = new CompletableFuture<>();
+        future.completeExceptionally(t);
+        return future;
     }
 }
